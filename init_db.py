@@ -1,22 +1,18 @@
 import sqlite3
 
-# Script para crear la base de datos y la tabla usuarios
-def init_database():
-    connection = sqlite3.connect('usuarios.db')
-    cursor = connection.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            role TEXT DEFAULT 'cliente'
-        )
-    ''')
-    
-    connection.commit()
-    connection.close()
-    print("Base de datos y tabla 'usuarios' creadas exitosamente.")
+conn = sqlite3.connect("userdata.db")
+cursor = conn.cursor()
 
-if __name__ == '__main__':
-    init_database()
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    password BLOB NOT NULL,
+    rol TEXT NOT NULL DEFAULT 'user'
+)
+""")
+
+conn.commit()
+conn.close()
+
+print("DB lista con columna rol ✅")
