@@ -12,7 +12,7 @@ class RegistroUsuario:
         if not email or '@' not in email:
             return False, "Email inválido"
 
-        # Validar longitud de contraseña (8-10 caracteres)
+        # Validar password (8 a 10)
         if not password or len(password) < 8 or len(password) > 10:
             return False, "Credenciales Invalidas"
 
@@ -33,22 +33,18 @@ class RegistroUsuario:
     def hashear_contrasena(self, password):
         salt = bcrypt.gensalt(rounds=12)
         hash_password = bcrypt.hashpw(password.encode('utf-8'), salt)
-        return hash_password  # bytes para BLOB ✅
+        return hash_password  # bytes
 
     def registrar_usuario(self, email, password):
-        # Validar credenciales
         es_valido, mensaje_error = self.validar_credenciales(email, password)
         if not es_valido:
             return {'status': False, 'codigo': 400, 'mensaje': mensaje_error}
 
-        # Verificar si el usuario ya existe
         if self.usuario_existe(email):
             return {'status': False, 'codigo': 409, 'mensaje': 'El usuario ya existe'}
 
-        # Hashear la contraseña
         password_hash = self.hashear_contrasena(password)
 
-        # Guardar en la base de datos
         try:
             connection = sqlite3.connect(self.db_name)
             cursor = connection.cursor()
@@ -64,18 +60,44 @@ class RegistroUsuario:
         except sqlite3.Error as e:
             return {'status': False, 'codigo': 500, 'mensaje': f'Error en la base de datos: {str(e)}'}
 
-    # ==========================
-    # ✅ NUEVO: Actualizar password
-    # ==========================
+    # ✅ LO QUE TE FALTABA: VALIDAR USUARIO PARA /login
+    def validar_usuario(self, email, password):
+        try:
+            connection = sqlite3.connect(self.db_name)
+            cursor = connection.cursor()
+
+            # OJO: tu columna es "rol" (no "role")
+            cursor.execute("SELECT password, rol FROM usuarios WHERE email = ?", (email,))
+            row = cursor.fetchone()
+            connection.close()
+
+            if not row:
+                return {"status": False, "mensaje": "Usuario no encontrado"}
+
+            hash_guardado = row[0]  # puede venir bytes o str
+            rol = row[1]
+
+            # Si viene como str, lo pasamos a bytes
+            if isinstance(hash_guardado, str):
+                hash_guardado = hash_guardado.encode("utf-8")
+
+            # Comparar password con bcrypt
+            if not bcrypt.checkpw(password.encode("utf-8"), hash_guardado):
+                return {"status": False, "mensaje": "Contraseña incorrecta"}
+
+            return {"status": True, "mensaje": "Login correcto", "rol": rol}
+
+        except sqlite3.Error as e:
+            print("Error validar_usuario:", e)
+            return {"status": False, "mensaje": "Error interno"}
+
     def actualizar_password(self, email, password_actual, password_nueva):
-        # Validaciones básicas
         if not email or '@' not in email:
             return {'status': False, 'codigo': 400, 'mensaje': 'Email inválido'}
 
         if not password_actual or not password_nueva:
             return {'status': False, 'codigo': 400, 'mensaje': 'Datos incompletos'}
 
-        # Mantener tu regla 8-10 caracteres
         if len(password_nueva) < 8 or len(password_nueva) > 10:
             return {'status': False, 'codigo': 400, 'mensaje': 'Credenciales Invalidas'}
 
@@ -83,7 +105,6 @@ class RegistroUsuario:
             connection = sqlite3.connect(self.db_name)
             cursor = connection.cursor()
 
-            # 1) Buscar el hash guardado
             cursor.execute("SELECT password FROM usuarios WHERE email = ?", (email,))
             fila = cursor.fetchone()
 
@@ -91,17 +112,17 @@ class RegistroUsuario:
                 connection.close()
                 return {'status': False, 'codigo': 404, 'mensaje': 'Usuario no encontrado'}
 
-            hash_guardado = fila[0]  # bytes (BLOB)
+            hash_guardado = fila[0]
 
-            # 2) Verificar password actual
+            if isinstance(hash_guardado, str):
+                hash_guardado = hash_guardado.encode("utf-8")
+
             if not bcrypt.checkpw(password_actual.encode('utf-8'), hash_guardado):
                 connection.close()
                 return {'status': False, 'codigo': 401, 'mensaje': 'Contraseña actual incorrecta'}
 
-            # 3) Hashear password nueva
             nuevo_hash = bcrypt.hashpw(password_nueva.encode('utf-8'), bcrypt.gensalt(rounds=12))
 
-            # 4) Actualizar en DB
             cursor.execute(
                 "UPDATE usuarios SET password = ? WHERE email = ?",
                 (nuevo_hash, email)
@@ -115,9 +136,6 @@ class RegistroUsuario:
         except sqlite3.Error as e:
             return {'status': False, 'codigo': 500, 'mensaje': f'Error en la base de datos: {str(e)}'}
 
-    # ==========================
-    # ✅ NUEVO: Actualizar rol
-    # ==========================
     def actualizar_rol(self, email, rol):
         if not email or '@' not in email:
             return {'status': False, 'codigo': 400, 'mensaje': 'Email inválido'}
@@ -127,7 +145,6 @@ class RegistroUsuario:
 
         rol = rol.lower().strip()
 
-        # Puedes dejar estos roles permitidos (ajusta si tu profe pide otros)
         roles_validos = {"cliente", "user", "admin"}
         if rol not in roles_validos:
             return {'status': False, 'codigo': 400, 'mensaje': 'Rol inválido (usa: cliente, user o admin)'}
@@ -136,13 +153,11 @@ class RegistroUsuario:
             connection = sqlite3.connect(self.db_name)
             cursor = connection.cursor()
 
-            # Verificar que exista el usuario
             cursor.execute("SELECT id FROM usuarios WHERE email = ?", (email,))
             if not cursor.fetchone():
                 connection.close()
                 return {'status': False, 'codigo': 404, 'mensaje': 'Usuario no encontrado'}
 
-            # Actualizar rol
             cursor.execute(
                 "UPDATE usuarios SET rol = ? WHERE email = ?",
                 (rol, email)
